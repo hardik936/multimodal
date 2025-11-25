@@ -1,0 +1,42 @@
+# Core Framework
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# Database
+sqlalchemy
+alembic
+psycopg2-binary
+
+# Background Tasks (Huey - No Redis needed!)
+huey
+
+# LLM & Orchestration
+langgraph
+langchain
+langchain-groq
+groq
+
+# Tools & Utilities
+httpx
+requests
+python-dotenv
+python-multipart
+
+# Web Search (Free & Unlimited)
+duckduckgo-search
+
+# PDF Processing
+pypdf
+pdfplumber
+
+# Authentication
+pyjwt
+
+passlib[bcrypt]
+
+# Testing
+pytest
+pytest-asyncio
+
