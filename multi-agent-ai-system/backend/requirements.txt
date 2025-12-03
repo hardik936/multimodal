@@ -11,3 +11,7 @@ langgraph
 langchain-groq
 langchain-community
 duckduckgo-search
+groq
+pypdf
+pdfplumber
+huey

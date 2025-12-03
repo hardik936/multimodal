@@ -12,9 +12,12 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./app.db"
     
     # Groq API
-    GROQ_API_KEY: str
+    GROQ_API_KEY: str | None = None
     GROQ_MODEL: str = "llama-3-70b-versatile"
     GROQ_RATE_LIMIT: int = 70  # requests per minute
+    
+    # OpenAI API (optional fallback)
+    OPENAI_API_KEY: str | None = None
     
     # JWT Authentication
     SECRET_KEY: str
@@ -38,6 +41,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra environment variables
 
 settings = Settings()
 

@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional, Any
 import uuid
 
 from app.database import get_db
 from app.models.run import WorkflowRun
+from app.models.workflow import Workflow
+from app.tasks.huey_tasks import execute_workflow_task
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -19,13 +21,30 @@ class RunResponse(BaseModel):
     workflow_id: str
     status: str
     input_data: dict
+    output_data: Optional[dict] = None
     started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_seconds: float = 0.0
+    error_message: Optional[str] = None
 
     class Config:
         from_attributes = True
 
+    @staticmethod
+    def calculate_duration(run: WorkflowRun) -> float:
+        if run.completed_at:
+            return (run.completed_at - run.started_at).total_seconds()
+        if run.started_at:
+            return (datetime.utcnow() - run.started_at).total_seconds()
+        return 0.0
+
 @router.post("", response_model=RunResponse)
 async def create_run(run: RunCreate, db: Session = Depends(get_db)):
+    # Verify workflow exists
+    workflow = db.query(Workflow).filter(Workflow.id == run.workflow_id).first()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
     db_run = WorkflowRun(
         workflow_id=run.workflow_id,
         status="pending",
@@ -35,8 +54,49 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
     db.add(db_run)
     db.commit()
     db.refresh(db_run)
+    
+    # Trigger background task
+    # Note: With HUEY_IMMEDIATE=True, this runs synchronously
+    execute_workflow_task(
+        run_id=db_run.id,
+        workflow_id=workflow.id,
+        workflow_config={
+            "graph_definition": workflow.graph_definition,
+            "agents_config": workflow.agents_config
+        },
+        input_data=run.input_data
+    )
+    
+    # Refresh to get any updates if synchronous
+    db.refresh(db_run)
+    
     return db_run
 
 @router.get("", response_model=List[RunResponse])
 async def list_runs(db: Session = Depends(get_db)):
-    return db.query(WorkflowRun).all()
+    runs = db.query(WorkflowRun).all()
+    # Add computed fields if they are not properties on the model
+    for run in runs:
+        if run.completed_at:
+            run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
+        elif run.started_at:
+            run.duration_seconds = (datetime.utcnow() - run.started_at).total_seconds()
+        else:
+            run.duration_seconds = 0.0
+    return runs
+
+@router.get("/{run_id}", response_model=RunResponse)
+async def get_run(run_id: str, db: Session = Depends(get_db)):
+    run = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    
+    # Compute duration
+    if run.completed_at:
+        run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
+    elif run.started_at:
+        run.duration_seconds = (datetime.utcnow() - run.started_at).total_seconds()
+    else:
+        run.duration_seconds = 0.0
+        
+    return run

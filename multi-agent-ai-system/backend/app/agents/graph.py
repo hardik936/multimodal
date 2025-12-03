@@ -62,3 +62,8 @@ def create_graph():
     return workflow.compile()
 
 graph = create_graph()
+
+# Alias for compatibility with huey_tasks
+def create_multi_agent_workflow(config: dict = None):
+    # In the future, config can be used to customize the graph
+    return create_graph()

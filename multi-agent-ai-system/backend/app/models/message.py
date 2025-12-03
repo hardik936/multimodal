@@ -5,6 +5,13 @@ from typing import Optional
 from .base import Base, UUIDMixin
 
 
+from enum import Enum
+
+class MessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    AGENT = "agent"
+
 class Message(Base, UUIDMixin):
     """Message model representing a message in a workflow run conversation."""
     
@@ -18,6 +25,7 @@ class Message(Base, UUIDMixin):
     )
     role: Mapped[str] = mapped_column(
         String(50),
+        default=MessageRole.AGENT,
         nullable=False,
         index=True
     )
