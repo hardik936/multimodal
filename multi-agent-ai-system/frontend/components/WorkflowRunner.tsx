@@ -15,7 +15,7 @@ interface WorkflowRunnerProps {
 }
 
 export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
-    const [inputData, setInputData] = useState<string>('{\n  "query": "What is artificial intelligence?"\n}');
+    const [inputData, setInputData] = useState<string>('');
     const [run, setRun] = useState<WorkflowRun | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
@@ -72,10 +72,16 @@ export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
         }
 
         try {
-            const parsedInput = JSON.parse(inputData);
+            // Convert plain text input to the format expected by the backend
+            const payload = {
+                input: inputData.trim(),
+                language: 'python',
+                mode: 'full'
+            };
+
             const response = await runAPI.create({
                 workflow_id: workflowId,
-                input_data: parsedInput
+                input_data: payload
             });
             const newRun: WorkflowRun = response.data;
             setRun(newRun);
@@ -133,12 +139,12 @@ export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-400">Input (JSON)</label>
+                        <label className="text-sm font-medium text-slate-400">Your Request</label>
                         <Textarea
                             value={inputData}
                             onChange={(e) => setInputData(e.target.value)}
-                            placeholder='{"query": "..."}'
-                            className="font-mono text-sm bg-slate-950 border-slate-800 min-h-[200px] text-slate-300 focus:ring-blue-500/20"
+                            placeholder="Describe what you want the workflow to do... (e.g., 'find me 10 emails of companies that i can market my ai testing services')"
+                            className="bg-slate-950 border-slate-800 min-h-[150px] text-slate-300 focus:ring-blue-500/20"
                             disabled={loading}
                         />
                     </div>

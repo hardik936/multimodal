@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     
     # Groq API
     GROQ_API_KEY: str | None = None
-    GROQ_MODEL: str = "llama-3-70b-versatile"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     GROQ_RATE_LIMIT: int = 70  # requests per minute
     
     # OpenAI API (optional fallback)

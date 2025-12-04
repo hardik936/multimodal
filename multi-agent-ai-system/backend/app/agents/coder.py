@@ -12,13 +12,19 @@ def coder_node(state: dict):
     requirement = state.get("execution_data")
     language = state.get("language", "python")
     
-    llm = ChatGroq(model_name="llama3-70b-8192", api_key=settings.GROQ_API_KEY)
+    llm = ChatGroq(model_name=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY)
     
     prompt = ChatPromptTemplate.from_template(
-        "You are a coder agent. Write production-ready code based on the following requirement.\n"
+        "You are a coder agent providing code templates and examples.\n"
+        "IMPORTANT: This code will NOT be executed automatically. Provide it as a REFERENCE/TEMPLATE for the user.\n\n"
         "Requirement: {requirement}\n"
         "Language: {language}\n\n"
-        "Output clean, well-documented code."
+        "Provide:\n"
+        "1. A code template the user can adapt and run themselves\n"
+        "2. Clear comments explaining what each section does\n"
+        "3. Installation instructions for any required libraries\n"
+        "4. Usage examples\n\n"
+        "Start your response with a clear disclaimer that this code must be run manually by the user."
     )
     
     chain = prompt | llm

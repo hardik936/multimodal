@@ -11,12 +11,18 @@ def executor_node(state: dict):
     """
     plan_data = state.get("plan_data")
     
-    llm = ChatGroq(model_name="llama3-70b-8192", api_key=settings.GROQ_API_KEY)
+    llm = ChatGroq(model_name=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY)
     
     prompt = ChatPromptTemplate.from_template(
-        "You are an executor agent. Expand the following plan into a detailed execution report.\n"
+        "You are an executor agent providing guidance for manual execution.\n"
+        "IMPORTANT: You CANNOT execute tasks automatically. You can only provide detailed guidance.\n\n"
         "Plan: {plan_data}\n\n"
-        "Provide step-by-step execution details, expected outcomes, potential issues and mitigations, and verification steps."
+        "Provide a detailed execution guide that explains:\n"
+        "1. How the USER can manually perform each step\n"
+        "2. What tools or resources they should use\n"
+        "3. Expected outcomes and how to verify success\n"
+        "4. Potential challenges and how to overcome them\n\n"
+        "Be clear that these are MANUAL steps the user must perform themselves."
     )
     
     chain = prompt | llm

@@ -13,14 +13,24 @@ def planner_node(state: dict):
     task = state.get("input")
     research_data = state.get("research_data")
     
-    llm = ChatGroq(model_name="llama3-70b-8192", api_key=settings.GROQ_API_KEY)
+    llm = ChatGroq(model_name=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY)
     
     prompt = ChatPromptTemplate.from_template(
-        "You are a planner agent. Break down the following task into clear, actionable steps.\n"
+        "You are a planner agent for an AI system with LIMITED capabilities.\n"
+        "IMPORTANT: This system can ONLY perform web research via DuckDuckGo. It CANNOT:\n"
+        "- Visit websites or scrape data\n"
+        "- Execute code or scripts\n"
+        "- Send emails or make API calls\n"
+        "- Access databases or paid services\n\n"
         "Task: {task}\n"
         "Research Data: {research_data}\n\n"
-        "Return a JSON object with a 'steps' key, which is a list of steps. "
-        "Each step should have 'id', 'description', 'estimated_time', 'dependencies', and 'complexity'."
+        "Based on the research findings, create a realistic action plan that:\n"
+        "1. Summarizes what information WAS found through research\n"
+        "2. Provides actionable next steps the USER can take manually\n"
+        "3. Suggests tools or methods the user could use themselves\n\n"
+        "Return a JSON object with a 'steps' key containing realistic manual steps. "
+        "Each step should have 'id', 'description', 'estimated_time', 'dependencies', and 'complexity'.\n"
+        "Focus on what the USER should do, not what the system will do automatically."
         "Ensure the output is valid JSON."
     )
     

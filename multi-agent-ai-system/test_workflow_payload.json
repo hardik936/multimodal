@@ -1,0 +1,53 @@
+{
+    "name": "Test Workflow",
+    "description": "Testing workflow creation",
+    "graph_definition": {
+        "nodes": [
+            "researcher",
+            "planner",
+            "executor",
+            "coder"
+        ],
+        "edges": [
+            {
+                "from": "researcher",
+                "to": "planner"
+            },
+            {
+                "from": "planner",
+                "to": "executor"
+            },
+            {
+                "from": "executor",
+                "to": "coder"
+            }
+        ]
+    },
+    "agents_config": {
+        "researcher": {
+            "name": "Researcher",
+            "type": "researcher",
+            "temperature": 0.7,
+            "max_tokens": 2000
+        },
+        "planner": {
+            "name": "Planner",
+            "type": "planner",
+            "temperature": 0.5,
+            "max_tokens": 2000
+        },
+        "executor": {
+            "name": "Executor",
+            "type": "executor",
+            "temperature": 0.3,
+            "max_tokens": 2000
+        },
+        "coder": {
+            "name": "Coder",
+            "type": "coder",
+            "temperature": 0.2,
+            "max_tokens": 3000
+        }
+    },
+    "is_public": false
+}

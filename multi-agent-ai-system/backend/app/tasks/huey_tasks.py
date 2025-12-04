@@ -70,14 +70,16 @@ def execute_workflow_task(
             raise ValueError("input_data cannot be None")
 
         initial_state = {
-            "input": input_data.get("query", ""),
+            "input": input_data.get("input") or input_data.get("query", ""),
+            "language": input_data.get("language", "python"),
+            "mode": input_data.get("mode", "full"),
             "messages": [],
             # Initialize other state keys as needed by the graph
             "current_agent": "planner",  # Default starting point
-            "research_data": {},
+            "research_data": "",
             "plan_data": {},
-            "execution_data": {},
-            "code_data": {},
+            "execution_data": "",
+            "code_data": "",
             "final_output": ""
         }
         
