@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     
     # Huey Background Tasks
     HUEY_IMMEDIATE: bool = False  # True = synchronous (for testing)
+
+    # RabbitMQ
+    BROKER_URL: str = "amqp://guest:guest@localhost:5672/"
     
     # File Storage
     UPLOAD_DIR: str = "./uploads"
@@ -35,7 +38,9 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
-        "http://localhost:8000"
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://10.224.3.136:3000"
     ]
     
     class Config:

@@ -41,6 +41,7 @@ class WorkflowUpdate(BaseModel):
 class WorkflowResponse(BaseModel):
     """Workflow response"""
     id: str
+    user_id: str
     name: str
     description: Optional[str]
     status: WorkflowStatus

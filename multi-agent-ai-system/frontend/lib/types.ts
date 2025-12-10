@@ -22,6 +22,7 @@ export interface AgentConfig {
 
 export interface Workflow {
     id: string;
+    user_id: string;
     name: string;
     description?: string;
     status: WorkflowStatus;

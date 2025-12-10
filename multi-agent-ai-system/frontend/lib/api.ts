@@ -1,6 +1,13 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+
+if (!API_BASE_URL) {
+    console.error("CRITICAL: NEXT_PUBLIC_API_URL is missing! Backend integration will fail.");
+    throw new Error("NEXT_PUBLIC_API_URL environment variable is not defined");
+}
+
+console.log(`[API Client] Initialized with Base URL: ${API_BASE_URL}`);
 
 const api = axios.create({
     baseURL: `${API_BASE_URL}/api/v1`,

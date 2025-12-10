@@ -24,6 +24,8 @@ async def lifespan(app: FastAPI):
     init_db()
     yield
     # Shutdown
+    from app.queue.producer import close_connection
+    await close_connection()
     logger.info("Shutting down application")
 
 app = FastAPI(

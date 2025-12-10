@@ -5,24 +5,36 @@ from app.config import settings
 def executor_node(state: dict):
     """
     Executor agent:
-    - Expands a given instruction into an execution report.
-    - Input key: "instruction" (derived from plan).
-    - Output: step-by-step execution details, expected outcomes, potential issues and mitigations, and verification steps.
+    - Provides brief technical notes for complex queries.
+    - Skips execution for simple informational queries.
+    - Input keys: "plan_data" and "query_complexity".
+    - Output: brief technical notes (or null for simple queries).
     """
     plan_data = state.get("plan_data")
+    query_complexity = state.get("query_complexity", "SIMPLE")
     
+    # Skip execution for simple queries
+    if query_complexity == "SIMPLE":
+        print("Skipping execution for SIMPLE query")
+        return {"execution_data": None}
+    
+    # For complex queries, provide brief technical notes
     llm = ChatGroq(model_name=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY)
     
     prompt = ChatPromptTemplate.from_template(
-        "You are an executor agent providing guidance for manual execution.\n"
-        "IMPORTANT: You CANNOT execute tasks automatically. You can only provide detailed guidance.\n\n"
+        "You are an executor agent documenting what was done internally.\n\n"
         "Plan: {plan_data}\n\n"
-        "Provide a detailed execution guide that explains:\n"
-        "1. How the USER can manually perform each step\n"
-        "2. What tools or resources they should use\n"
-        "3. Expected outcomes and how to verify success\n"
-        "4. Potential challenges and how to overcome them\n\n"
-        "Be clear that these are MANUAL steps the user must perform themselves."
+        "Provide a BRIEF technical note (2-3 sentences maximum) describing:\n"
+        "- What research/analysis was performed\n"
+        "- What data sources were consulted\n"
+        "- Any synthesis or processing that occurred\n\n"
+        "CRITICAL RULES:\n"
+        "- This is an INTERNAL technical note, NOT user instructions\n"
+        "- Do NOT tell users to 'open browser', 'search Google', 'visit websites', etc.\n"
+        "- Do NOT provide step-by-step manual execution guides\n"
+        "- Keep it to 2-3 sentences maximum\n"
+        "- Focus on what the SYSTEM did, not what the user should do\n\n"
+        "Example: 'Performed web search across 3 queries, analyzed 9 sources, and synthesized findings into structured summary.'"
     )
     
     chain = prompt | llm
@@ -30,6 +42,8 @@ def executor_node(state: dict):
         response = chain.invoke({"plan_data": plan_data})
         content = response.content
     except Exception as e:
-        content = f"Execution planning failed: {str(e)}"
+        print(f"Execution documentation error: {e}")
+        content = None
     
     return {"execution_data": content}
+

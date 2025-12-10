@@ -2,7 +2,8 @@
 
 from .base import Base
 from .workflow import Workflow
-from .run import WorkflowRun
+from .log import Log
 from .message import Message
+from .run import WorkflowRun
 
-__all__ = ["Base", "Workflow", "WorkflowRun", "Message"]
+__all__ = ["Base", "Workflow", "Log", "Message", "WorkflowRun"]

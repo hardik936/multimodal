@@ -205,12 +205,31 @@ export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
 
                         {run.output_data && (
                             <div className="space-y-2">
-                                <p className="text-sm font-medium text-slate-400">Output</p>
-                                <div className="p-4 rounded-md bg-slate-950 border border-slate-800 overflow-x-auto">
-                                    <pre className="text-xs font-mono text-green-400">
-                                        {JSON.stringify(run.output_data, null, 2)}
-                                    </pre>
-                                </div>
+                                {/* Display clean result if available */}
+                                {(run as any).result && (
+                                    <div className="space-y-2">
+                                        <p className="text-sm font-medium text-slate-400">Result</p>
+                                        <div className="p-4 rounded-md bg-slate-950 border border-slate-800 overflow-x-auto">
+                                            <div className="prose prose-invert prose-sm max-w-none">
+                                                <pre className="text-sm text-slate-300 whitespace-pre-wrap font-sans">
+                                                    {(run as any).result}
+                                                </pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Show raw output in a collapsible section for debugging */}
+                                <details className="group">
+                                    <summary className="text-sm font-medium text-slate-500 cursor-pointer hover:text-slate-400 transition-colors">
+                                        Raw Output (Debug)
+                                    </summary>
+                                    <div className="mt-2 p-4 rounded-md bg-slate-950 border border-slate-800 overflow-x-auto">
+                                        <pre className="text-xs font-mono text-green-400">
+                                            {JSON.stringify(run.output_data, null, 2)}
+                                        </pre>
+                                    </div>
+                                </details>
                             </div>
                         )}
                     </CardContent>

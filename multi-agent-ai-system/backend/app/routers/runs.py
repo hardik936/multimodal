@@ -6,7 +6,7 @@ import uuid
 from app.database import get_db
 from app.models.run import WorkflowRun
 from app.models.workflow import Workflow
-from app.tasks.huey_tasks import execute_workflow_task
+# from app.tasks.huey_tasks import execute_workflow_task
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -22,6 +22,7 @@ class RunResponse(BaseModel):
     status: str
     input_data: dict
     output_data: Optional[dict] = None
+    result: Optional[str] = None
     started_at: datetime
     completed_at: Optional[datetime] = None
     duration_seconds: float = 0.0
@@ -57,15 +58,23 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
     
     # Trigger background task
     # Note: With HUEY_IMMEDIATE=True, this runs synchronously
-    execute_workflow_task(
-        run_id=db_run.id,
-        workflow_id=workflow.id,
-        workflow_config={
+    # Trigger background task via RabbitMQ
+    from app.queue.producer import publish_message
+    
+    task_payload = {
+        "workflow_config": {
             "graph_definition": workflow.graph_definition,
             "agents_config": workflow.agents_config
         },
-        input_data=run.input_data
-    )
+        "input_data": run.input_data
+    }
+    
+    await publish_message({
+        "task_id": db_run.id,
+        "task_type": "workflow_execution",
+        "payload": task_payload,
+        "created_at": str(datetime.now())
+    })
     
     # Refresh to get any updates if synchronous
     db.refresh(db_run)
@@ -83,6 +92,11 @@ async def list_runs(db: Session = Depends(get_db)):
             run.duration_seconds = (datetime.utcnow() - run.started_at).total_seconds()
         else:
             run.duration_seconds = 0.0
+        
+        # Populate result from final_output if available
+        if run.output_data and "final_output" in run.output_data:
+            run.result = run.output_data["final_output"]
+            
     return runs
 
 @router.get("/{run_id}", response_model=RunResponse)
@@ -98,5 +112,9 @@ async def get_run(run_id: str, db: Session = Depends(get_db)):
         run.duration_seconds = (datetime.utcnow() - run.started_at).total_seconds()
     else:
         run.duration_seconds = 0.0
+
+    # Populate result from final_output if available
+    if run.output_data and "final_output" in run.output_data:
+        run.result = run.output_data["final_output"]
         
     return run

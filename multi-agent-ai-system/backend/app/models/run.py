@@ -22,7 +22,8 @@ class WorkflowRun(Base, UUIDMixin, TimestampMixin):
     output_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     workflow = relationship("Workflow", back_populates="runs")
-    logs = relationship("Log", back_populates="run")
+    logs = relationship("app.models.log.Log")
     messages = relationship("Message", back_populates="run")

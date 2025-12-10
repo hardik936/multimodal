@@ -104,3 +104,10 @@ logs/
 *.tmp
 *.temp
 .cache/
+
+# ===== TEST FILES WITH SECRETS =====
+backend/test_groq.py
+backend/test_models.py
+backend/test_models_clean.py
+backend/verify_models.py
+backend/test_workflow.py

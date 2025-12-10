@@ -13,4 +13,5 @@ class Log(Base):
     message: Mapped[str] = mapped_column(String)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    run = relationship("WorkflowRun", back_populates="logs")
+    # Unidirectional relationship - no back_populates to avoid circular dependency
+    run = relationship("WorkflowRun")

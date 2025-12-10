@@ -1,5 +1,6 @@
 from datetime import datetime
 from sqlalchemy import String, Text, JSON, ForeignKey, DateTime, Index
+from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
 from .base import Base, UUIDMixin
@@ -35,7 +36,7 @@ class Message(Base, UUIDMixin):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        server_default="CURRENT_TIMESTAMP"
+        server_default=func.now()
     )
     
     # Relationships
@@ -46,7 +47,6 @@ class Message(Base, UUIDMixin):
     
     __table_args__ = (
         Index("ix_messages_run_created", "run_id", "created_at"),
-        Index("ix_messages_role", "role"),
     )
     
     def __repr__(self) -> str:
