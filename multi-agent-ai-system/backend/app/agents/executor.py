@@ -37,9 +37,16 @@ def executor_node(state: dict):
         "Example: 'Performed web search across 3 queries, analyzed 9 sources, and synthesized findings into structured summary.'"
     )
     
+    # Setup cost tracking
+    from app.costs.langchain_callback import CostTrackingCallbackHandler
+    workflow_id = state.get("active_workflow_id")
+    agent_id = state.get("active_agent_id", "executor")
+    
+    callbacks = [CostTrackingCallbackHandler(workflow_id=workflow_id, agent_id=agent_id)]
+    
     chain = prompt | llm
     try:
-        response = chain.invoke({"plan_data": plan_data})
+        response = chain.invoke({"plan_data": plan_data}, config={"callbacks": callbacks})
         content = response.content
     except Exception as e:
         print(f"Execution documentation error: {e}")

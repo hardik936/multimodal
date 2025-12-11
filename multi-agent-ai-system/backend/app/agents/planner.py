@@ -39,9 +39,16 @@ def planner_node(state: dict):
         "Ensure the output is valid JSON."
     )
     
+    # Setup cost tracking
+    from app.costs.langchain_callback import CostTrackingCallbackHandler
+    workflow_id = state.get("active_workflow_id")
+    agent_id = state.get("active_agent_id", "planner")
+    
+    callbacks = [CostTrackingCallbackHandler(workflow_id=workflow_id, agent_id=agent_id)]
+    
     chain = prompt | llm | JsonOutputParser()
     try:
-        response = chain.invoke({"task": task, "research_data": research_data})
+        response = chain.invoke({"task": task, "research_data": research_data}, config={"callbacks": callbacks})
     except Exception as e:
         print(f"Planning error: {e}")
         response = None

@@ -15,6 +15,8 @@ from .adapters import adapter_registry
 from .validation import validate_input, SchemaValidationError, format_validation_error
 from .tracking import usage_tracker
 from app.observability.tracing import get_tracer, trace_span, add_span_attributes, set_span_error
+from app.reliability.retry import retry_with_backoff
+from app.reliability.circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
 
 logger = logging.getLogger(__name__)
 tracer = get_tracer("tool.executor")
@@ -163,10 +165,51 @@ def execute_tool(
             try:
                 # Convert Pydantic model to dict for function call
                 input_dict = validated_input.model_dump()
-                result = tool_def.implementation(**input_dict)
+                
+                # Get circuit breaker for this specific tool
+                # We use the resolved identifier to isolate versions if needed
+                # e.g. "web_search@1.0.0"
+                cb_name = f"tool:{executed_version}"
+                circuit_breaker = get_circuit_breaker(cb_name, failure_threshold=5, recovery_timeout=30)
+                
+                # Define the execution logic to be wrapped
+                def _run_tool():
+                    return tool_def.implementation(**input_dict)
+                
+                # Define retry wrapper
+                # We only retry on RuntimeErrors or specific transient issues, 
+                # NOT on SchemaValidation (which is already caught above) 
+                # or deterministic Logic errors if possible.
+                # For now, we retry on general Exceptions excluding specific ones if we had them.
+                @retry_with_backoff(max_attempts=3, initial_delay=0.1, retry_on=[Exception])
+                def _run_with_retry():
+                    return circuit_breaker.call(_run_tool)
+
+                # Execute with reliability patterns
+                result = _run_with_retry()
+                
                 success = True
                 error = None
-                add_span_attributes(tool_span, {"tool.status": "success"})
+                add_span_attributes(tool_span, {"tool.status": "success", "circuit_breaker.id": cb_name})
+
+            except CircuitBreakerOpenException as e:
+                logger.warning(f"Circuit {cb_name} OPEN. Failing tool execution.")
+                result = None
+                success = False
+                error = f"Circuit Breaker OPEN: {str(e)}"
+                add_span_attributes(tool_span, {
+                    "tool.status": "circuit_open", 
+                    "circuit_breaker.state": "OPEN",
+                    "circuit_breaker.id": cb_name
+                })
+                # We do NOT raise here to allow for graceful degradation if the caller handles success=False
+                # But the current contract raises exceptions or returns ToolInvocationResult. 
+                # The code below returns ToolInvocationResult even on failure (but `result` is None)
+                # UNLESS an exception raised.
+                # The existing code swallowed exceptions in the `except Exception` block below 
+                # and returned result=None, success=False. Use that pattern.
+                pass 
+
             except Exception as e:
                 logger.error(f"Tool execution failed for {tool_def.identifier}: {e}")
                 result = None

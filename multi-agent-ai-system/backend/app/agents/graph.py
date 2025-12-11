@@ -21,6 +21,7 @@ class AgentState(TypedDict):
     execution_data: str
     code_data: str
     final_output: str  # NEW: Always populated by finalizer
+    workflow_id: str # ID for checkpointing and tracing
     messages: Annotated[List[BaseMessage], add_messages]
 
 def should_continue_after_research(state: AgentState):

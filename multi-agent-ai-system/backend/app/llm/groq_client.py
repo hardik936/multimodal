@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 # Store timestamps of recent requests for rate limiting
 _request_timestamps: List[float] = []
 
+from app.reliability.retry import retry_with_backoff
+from app.reliability.circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
+from app.costs.tracker import record_llm_usage
+
+
 def rate_limit_groq(func):
     """
     Decorator that enforces a rate limit on Groq API calls.
@@ -64,6 +69,12 @@ def get_groq_llm() -> ChatGroq:
     )
 
 @rate_limit_groq
+@retry_with_backoff(
+    max_attempts=3,
+    initial_delay=1.0,
+    retry_on=[Exception], # Retry on most things for now, including network/rate limits
+    jitter=True
+)
 def call_groq_sync(
     prompt: str,
     model: Optional[str] = None,
@@ -76,10 +87,11 @@ def call_groq_sync(
     """
     if not settings.GROQ_API_KEY:
         raise ValueError("GROQ_API_KEY is not set in settings.")
-        
-    try:
+    
+    circuit_breaker = get_circuit_breaker("groq_api", failure_threshold=5, recovery_timeout=60)
+    
+    def _execute_request():
         client = Groq(api_key=settings.GROQ_API_KEY)
-        
         response = client.chat.completions.create(
             model=model or settings.GROQ_MODEL,
             messages=[
@@ -90,12 +102,41 @@ def call_groq_sync(
             **kwargs
         )
         
+        # Extract usage
+        try:
+             # Basic usage info from Groq response
+             usage = response.usage
+             prompt_tokens = usage.prompt_tokens if usage else 0
+             completion_tokens = usage.completion_tokens if usage else 0
+             
+             # Context extraction - we might need to pass this in kwargs or inspect stack
+             # For now, we rely on kwargs having identifiers if passed, or default to None
+             workflow_id = kwargs.get("active_workflow_id")
+             agent_id = kwargs.get("active_agent_id")
+             
+             record_llm_usage(
+                 workflow_id=workflow_id,
+                 agent_id=agent_id,
+                 provider="groq",
+                 model=response.model,
+                 tokens_prompt=prompt_tokens,
+                 tokens_completion=completion_tokens
+             )
+        except Exception as e:
+            logger.warning(f"Failed to record usage: {e}")
+
         return response.choices[0].message.content
+
+    try:
+        # Wrap the API call in the circuit breaker
+        return circuit_breaker.call(_execute_request)
         
+    except CircuitBreakerOpenException as e:
+        logger.error(f"Groq Circuit Breaker OPEN: {e}")
+        raise 
     except Exception as e:
         logger.error(f"Error calling Groq API: {str(e)}")
         raise
-
 def get_groq_stats() -> Dict[str, Any]:
     """
     Returns current rate limit statistics.
