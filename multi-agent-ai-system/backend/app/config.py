@@ -43,6 +43,17 @@ class Settings(BaseSettings):
         "http://10.224.3.136:3000"
     ]
     
+    # Rate Limiting & Quota Management
+    RATE_LIMIT_ENABLED: bool = True
+    PROVIDER_GROQ_RATE_PER_SEC: int = 50
+    PROVIDER_OPENAI_RATE_PER_SEC: int = 20
+    QUOTA_WINDOW_DAYS: int = 30
+    DEFAULT_DAILY_QUOTA_TOKENS: int = 100000
+    ROUTING_POLICY: str = "primary"  # primary|cost_weighted|latency_weighted
+    PROVIDER_COOLDOWN_SEC: int = 60
+    QUOTA_ENFORCEMENT: str = "soft"  # soft|hard
+    REDIS_URL: str | None = None
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
