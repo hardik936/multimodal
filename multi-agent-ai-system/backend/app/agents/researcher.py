@@ -5,6 +5,7 @@ import os
 import time
 from app.config import settings
 from app.observability.tracing import get_tracer, trace_span, add_span_attributes
+from app.observability.events import emit_workflow_event, EventType
 
 tracer = get_tracer("agent.researcher")
 
@@ -17,6 +18,16 @@ def research_node(state: dict):
     - Uses simple heuristics for complexity detection instead of LLM calls.
     """
     original_input = state.get("input")
+    run_id = state.get("run_id", "unknown_run")
+    
+    # Emit agent started event
+    emit_workflow_event(
+        run_id=run_id,
+        event_type=EventType.WORKFLOW_AGENT_STARTED,
+        agent_name="Researcher",
+        progress=20,
+        payload={"agent_id": "researcher"}
+    )
     
     # Create agent.execute span
     with trace_span(
@@ -179,6 +190,15 @@ def research_node(state: dict):
         except Exception as e:
             print(f"LLM error: {e}")
             content = f"I apologize, but I encountered an error processing your request. Please try again."
+        
+        # Emit agent completed event
+        emit_workflow_event(
+            run_id=run_id,
+            event_type=EventType.WORKFLOW_AGENT_COMPLETED,
+            agent_name="Researcher",
+            progress=20,
+            payload={"agent_id": "researcher", "success": True}
+        )
         
         return {
             "research_data": content,

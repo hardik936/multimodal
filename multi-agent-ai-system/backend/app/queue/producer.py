@@ -22,7 +22,7 @@ async def close_connection():
         await _connection.close()
         _connection = None
 
-async def publish_message(message: dict, routing_key: str = "tasks.generic"):
+async def publish_message(message: dict, routing_key: str = "tasks.workflow_execution"):
     """
     Publish a message to RabbitMQ using a persistent connection.
     """

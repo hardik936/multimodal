@@ -13,19 +13,52 @@ from app.schemas.workflow import (
     MultiAgentRunRequest
 )
 from app.agents.graph import graph
+from app.auth import deps, models
+from typing import Annotated
 
 router = APIRouter()
 
 @router.post("/multi-agent/run")
-async def run_multi_agent_workflow(request: MultiAgentRunRequest):
+async def run_multi_agent_workflow(
+    request: MultiAgentRunRequest,
+    current_user: Annotated[models.User, Depends(deps.get_current_active_user)]
+):
     """Run the multi-agent workflow"""
+    # Determine workflow name from mode
+    # If mode is "invoice_ocr", we use that. Otherwise default to "default".
+    workflow_name = "default"
+    if request.mode == "invoice_ocr":
+        workflow_name = "invoice_ocr"
+        
     initial_state = {
         "input": request.input,
         "language": request.language,
         "mode": request.mode,
-        "messages": []
+        "messages": [],
+        "document_text": request.input # Default mappings
     }
-    result = graph.invoke(initial_state)
+    
+    # Check if input is JSON with file_path (from frontend upload)
+    import json
+    try:
+        if request.input.strip().startswith("{") and "file_path" in request.input:
+            data = json.loads(request.input)
+            if "file_path" in data:
+                initial_state["file_path"] = data["file_path"]
+                # If text is provided in the JSON, use it, otherwise use what we have
+                if "text" in data:
+                    initial_state["document_text"] = data["text"]
+                    
+    except json.JSONDecodeError:
+        pass # Not JSON, treat as plain text
+    
+    # Create appropriate graph
+    current_graph = graph
+    if workflow_name != "default":
+        from app.agents.graph import create_graph
+        current_graph = create_graph(workflow_name=workflow_name)
+        
+    result = current_graph.invoke(initial_state)
     return result
 
 @router.post(
@@ -36,10 +69,10 @@ async def run_multi_agent_workflow(request: MultiAgentRunRequest):
 async def create_workflow(
     workflow: WorkflowCreate,
     db: Session = Depends(get_db),
-    # user_id: str = Depends(get_current_user),  # Add auth later
+    current_user: Annotated[models.User, Depends(deps.get_current_active_user)] = None,
 ):
     """Create a new workflow"""
-    user_id = "demo-user"  # Placeholder
+    user_id = current_user.id if current_user else "demo-user"
     
     db_workflow = Workflow(
         id=str(uuid.uuid4()),
@@ -66,6 +99,7 @@ async def list_workflows(
     limit: int = Query(10, ge=1, le=100),
     status: Optional[WorkflowStatus] = None,
     db: Session = Depends(get_db),
+    current_user: Annotated[models.User, Depends(deps.get_current_active_user)] = None,
 ):
     """List all workflows"""
     query = db.query(Workflow)
@@ -80,6 +114,7 @@ async def list_workflows(
 async def get_workflow(
     workflow_id: str,
     db: Session = Depends(get_db),
+    current_user: Annotated[models.User, Depends(deps.get_current_active_user)] = None,
 ):
     """Get workflow by ID"""
     workflow = db.query(Workflow).filter(
@@ -103,6 +138,7 @@ async def update_workflow(
     workflow_id: str,
     workflow_update: WorkflowUpdate,
     db: Session = Depends(get_db),
+    current_user: Annotated[models.User, Depends(deps.get_current_active_user)] = None,
 ):
     """Update workflow"""
     workflow = db.query(Workflow).filter(
@@ -132,6 +168,7 @@ async def update_workflow(
 async def delete_workflow(
     workflow_id: str,
     db: Session = Depends(get_db),
+    current_user: Annotated[models.User, Depends(deps.get_current_active_user)] = None,
 ):
     """Delete workflow"""
     workflow = db.query(Workflow).filter(

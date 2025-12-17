@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 async def run_evalcase(
     case: EvalCase, 
     workflow_version: str, 
-    run_id: str = None  # The parent EvaluationRun ID (DB ID)
+    run_id: str = None,  # The parent EvaluationRun ID (DB ID)
+    workflow_name: str = "default" # The workflow type (e.g. "invoice_ocr")
 ) -> EvaluationResult:
     """
     Executes a single evaluation case against the workflow.
@@ -39,6 +40,7 @@ async def run_evalcase(
             "case.id": case.id,
             "case.matcher": case.matcher,
             "workflow.version": workflow_version,
+            "workflow.name": workflow_name,
             "evaluation.run_id": str(run_id)
         }
     ) as span:
@@ -47,6 +49,10 @@ async def run_evalcase(
         # We assume case.input contains keys that map to AgentState
         # e.g. {"input": "Make a game", "mode": "execution"}
         initial_state = case.input.copy()
+        
+        # Determine how to inject ID based on workflow type
+        # For default agent, it's 'workflow_id'. 
+        # For OCR, it's 'workflow_id' in TypedDict too (added in ocr.py).
         initial_state["workflow_id"] = case_run_id
         
         # Override metadata or config if needed based on `workflow_version`
@@ -54,7 +60,8 @@ async def run_evalcase(
         # In a real deployed environment, we might hit an API endpoint instead.
         # But per requirements ("student-friendly"), we run in-process code.
         
-        graph = create_graph()
+        # Pass workflow_name to factory
+        graph = create_graph(workflow_name=workflow_name)
         
         try:
             # Execute Workflow
@@ -153,7 +160,7 @@ async def run_evalset(
     
     async def run_with_sem(case):
         async with semaphore:
-            return await run_evalcase(case, workflow_version, run_id)
+            return await run_evalcase(case, workflow_version, run_id, workflow_name)
 
     with tracer.start_as_current_span(
         "evaluation.run",

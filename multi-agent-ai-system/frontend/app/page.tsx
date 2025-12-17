@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { workflowAPI } from '@/lib/api';
 import { Workflow, WorkflowStatus } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -14,6 +16,14 @@ export default function Home() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
 
   useEffect(() => {
     const fetchWorkflows = async () => {
@@ -30,8 +40,15 @@ export default function Home() {
       }
     };
 
-    fetchWorkflows();
-  }, []);
+
+    if (user) {
+      fetchWorkflows();
+    }
+  }, [user]);
+
+  if (authLoading || (!user && !error)) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">Loading auth...</div>;
+  }
 
   const getStatusBadgeVariant = (status: WorkflowStatus) => {
     switch (status) {

@@ -410,3 +410,23 @@ def get_rate_limiter() -> RateLimiter:
         _rate_limiter = RateLimiter(config)
     
     return _rate_limiter
+
+
+def get_redis_client():
+    """
+    Get Redis client for pub/sub and other features.
+    Returns None if Redis is not configured.
+    """
+    from .config import load_rate_limit_config
+    config = load_rate_limit_config()
+    
+    if not config.redis_url:
+        return None
+    
+    try:
+        import redis
+        return redis.from_url(config.redis_url, decode_responses=True)
+    except Exception as e:
+        logger.warning(f"Failed to get Redis client: {e}")
+        return None
+

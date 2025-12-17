@@ -15,7 +15,7 @@ def init_checkpoint_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS checkpoints (
+        CREATE TABLE IF NOT EXISTS agent_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             workflow_id TEXT NOT NULL,
             step TEXT NOT NULL,
@@ -23,7 +23,7 @@ def init_checkpoint_db():
             timestamp REAL NOT NULL
         )
     """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_id ON checkpoints (workflow_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflow_id ON agent_snapshots (workflow_id)")
     conn.commit()
     conn.close()
 
@@ -46,7 +46,7 @@ def save_checkpoint(workflow_id: str, step: str, state: Dict[str, Any]):
             cursor = conn.cursor()
             timestamp = time.time()
             cursor.execute(
-                "INSERT INTO checkpoints (workflow_id, step, state, timestamp) VALUES (?, ?, ?, ?)",
+                "INSERT INTO agent_snapshots (workflow_id, step, state, timestamp) VALUES (?, ?, ?, ?)",
                 (workflow_id, step, serialized_state, timestamp)
             )
             conn.commit()
@@ -66,7 +66,7 @@ def load_last_checkpoint(workflow_id: str) -> Optional[Dict[str, Any]]:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT step, state, timestamp FROM checkpoints WHERE workflow_id = ? ORDER BY timestamp DESC LIMIT 1",
+            "SELECT step, state, timestamp FROM agent_snapshots WHERE workflow_id = ? ORDER BY timestamp DESC LIMIT 1",
             (workflow_id,)
         )
         row = cursor.fetchone()

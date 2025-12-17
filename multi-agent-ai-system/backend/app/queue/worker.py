@@ -15,6 +15,7 @@ from app.models.run import RunStatus
 from app.models.message import MessageRole
 from app.agents.graph import create_multi_agent_workflow
 from app.observability.tracing import configure_tracing, get_tracer, trace_span, add_span_attributes, set_span_error
+from app.observability.events import emit_workflow_event, EventType
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -125,6 +126,13 @@ async def process_task(message_body: bytes):
 
         await loop.run_in_executor(None, update_run_status_sync, 
             run_id, RunStatus.RUNNING, datetime.now(timezone.utc), None, None, None
+        )
+        
+        # Emit workflow started event
+        emit_workflow_event(
+            run_id=run_id,
+            event_type=EventType.WORKFLOW_STARTED,
+            payload={"workflow_id": run.workflow_id, "input": input_data}
         )
 
         # 2. Execution with workflow.run tracing
@@ -243,6 +251,14 @@ async def process_task(message_body: bytes):
             run_id, RunStatus.COMPLETED, None, datetime.now(timezone.utc), output_data, None
         )
         
+        # Emit workflow completed event
+        emit_workflow_event(
+            run_id=run_id,
+            event_type=EventType.WORKFLOW_COMPLETED,
+            progress=100,
+            payload={"output": result_state.get("final_output", "")[:200]}  # Truncate output
+        )
+        
         logger.info(f"Task {run_id} completed successfully")
 
     except Exception as e:
@@ -253,6 +269,13 @@ async def process_task(message_body: bytes):
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, update_run_status_sync, 
                 run_id, RunStatus.FAILED, None, datetime.now(timezone.utc), None, str(e)
+            )
+            
+            # Emit workflow failed event
+            emit_workflow_event(
+                run_id=run_id,
+                event_type=EventType.WORKFLOW_FAILED,
+                payload={"error": str(e)}
             )
         raise
 
@@ -281,7 +304,7 @@ async def main():
                 
                 # Declare queue
                 queue = await channel.declare_queue(
-                    "tasks.generic", 
+                    "tasks.workflow_execution", 
                     durable=True,
                     arguments={'x-queue-type': 'classic'}
                 )

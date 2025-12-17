@@ -6,7 +6,7 @@ import logging
 
 from app.config import settings
 from app.database import init_db
-from app.routers import workflows, runs, logs
+from app.routers import workflows, runs, logs, auth, history
 
 # Configure logging
 logging.basicConfig(
@@ -82,6 +82,39 @@ app.include_router(
     logs.router,
     prefix=f"{settings.API_V1_PREFIX}/logs",
     tags=["logs"],
+)
+
+app.include_router(
+    history.router,
+    prefix=f"{settings.API_V1_PREFIX}",
+    tags=["history"],
+)
+
+app.include_router(
+    auth.router,
+    prefix=f"{settings.API_V1_PREFIX}/auth",
+    tags=["auth"],
+)
+
+from app.hitl import api as hitl_api
+app.include_router(
+    hitl_api.router,
+    prefix=f"{settings.API_V1_PREFIX}/hitl",
+    tags=["hitl"],
+)
+
+from app.routers import uploads
+app.include_router(
+    uploads.router,
+    prefix=f"{settings.API_V1_PREFIX}/uploads",
+    tags=["uploads"],
+)
+
+# WebSocket for real-time streaming
+from app.routers import websocket
+app.include_router(
+    websocket.router,
+    tags=["websocket"],
 )
 
 if __name__ == "__main__":

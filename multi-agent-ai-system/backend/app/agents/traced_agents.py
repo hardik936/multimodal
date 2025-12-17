@@ -8,6 +8,7 @@ import time
 import logging
 from typing import Callable, Dict, Any
 from app.observability.tracing import get_tracer, trace_span, add_span_attributes, set_span_error
+from app.observability.events import emit_workflow_event, EventType
 from app.reliability.checkpoint import save_checkpoint
 
 # Import original agent functions
@@ -17,6 +18,15 @@ from app.agents import coder as coder_module
 from app.agents import finalizer as finalizer_module
 
 logger = logging.getLogger(__name__)
+
+# Progress percentages for each agent
+AGENT_PROGRESS = {
+    "researcher": 20,
+    "planner": 40,
+    "executor": 60,
+    "coder": 80,
+    "finalizer": 100,
+}
 
 # Create tracers
 planner_tracer = get_tracer("agent.planner")
@@ -36,6 +46,17 @@ def _execute_with_reliability(
     Helper to execute an agent node with tracing, checkpointing, and error handling.
     """
     workflow_id = state.get("workflow_id", "unknown_workflow")
+    run_id = state.get("run_id", "unknown_run")
+    
+    # Emit agent started event
+    progress = AGENT_PROGRESS.get(agent_id, 0)
+    emit_workflow_event(
+        run_id=run_id,
+        event_type=EventType.WORKFLOW_AGENT_STARTED,
+        agent_name=agent_name,
+        progress=progress,
+        payload={"agent_id": agent_id}
+    )
     
     # 1. Checkpoint before execution
     try:
@@ -70,6 +91,15 @@ def _execute_with_reliability(
             
             result = node_func(state_with_context)
             add_span_attributes(agent_span, {"agent.status": "success"})
+            
+            # Emit agent completed event
+            emit_workflow_event(
+                run_id=run_id,
+                event_type=EventType.WORKFLOW_AGENT_COMPLETED,
+                agent_name=agent_name,
+                progress=progress,
+                payload={"agent_id": agent_id, "success": True}
+            )
             return result
             
         except Exception as e:

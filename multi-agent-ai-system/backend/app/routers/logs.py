@@ -4,6 +4,8 @@ from typing import List
 
 from app.database import get_db
 from app.models.log import Log
+from app.auth import deps, models
+from typing import Annotated
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -20,5 +22,8 @@ class LogResponse(BaseModel):
         from_attributes = True
 
 @router.get("", response_model=List[LogResponse])
-async def list_logs(db: Session = Depends(get_db)):
+async def list_logs(
+    db: Session = Depends(get_db),
+    current_user: Annotated[models.User, Depends(deps.get_current_active_user)] = None
+):
     return db.query(Log).all()

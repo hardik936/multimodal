@@ -47,7 +47,16 @@ def should_continue_after_plan(state: AgentState):
         return "finalizer"
     return "executor"
 
-def create_graph():
+from app.agents.ocr import create_ocr_graph
+
+def create_graph(config: dict = None, workflow_name: str = "default", checkpointer=None, interrupt_before=None):
+    """
+    Factory function to create the appropriate graph based on workflow_name.
+    """
+    if workflow_name == "invoice_ocr":
+        return create_ocr_graph(checkpointer=checkpointer, interrupt_before=interrupt_before)
+    
+    # Default / Researcher Workflow
     workflow = StateGraph(AgentState)
     
     # Add all nodes including the new finalizer
@@ -81,12 +90,12 @@ def create_graph():
     workflow.add_edge("coder", "finalizer")  # Always go to finalizer
     workflow.add_edge("finalizer", END)  # Finalizer is the last step before END
     
-    return workflow.compile()
+    return workflow.compile(checkpointer=checkpointer, interrupt_before=interrupt_before)
 
-graph = create_graph()
+graph = create_graph(workflow_name="default")
 
 # Alias for compatibility with huey_tasks
-def create_multi_agent_workflow(config: dict = None):
+def create_multi_agent_workflow(config: dict = None, checkpointer=None, interrupt_before=None):
     # In the future, config can be used to customize the graph
-    return create_graph()
+    return create_graph(config=config, workflow_name="default", checkpointer=checkpointer, interrupt_before=interrupt_before)
 

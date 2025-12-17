@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { AlertCircle, Loader2, CheckCircle2, XCircle, Clock, Wifi, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useWorkflowStream } from '@/hooks/useWorkflowStream';
 
 interface WorkflowRunnerProps {
     workflowId: string;
@@ -16,67 +17,75 @@ interface WorkflowRunnerProps {
 
 export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
     const [inputData, setInputData] = useState<string>('');
+    const [mode, setMode] = useState<string>('full');
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [run, setRun] = useState<WorkflowRun | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Cleanup polling on unmount
+    // Use WebSocket for real-time updates
+    const { progress, currentAgent, connectionState, events } = useWorkflowStream(
+        run?.id || null,
+        !!run
+    );
+
+    // Auto-stop loading when workflow completes
     useEffect(() => {
-        return () => {
-            if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-            }
-        };
-    }, []);
-
-    const pollRunStatus = (runId: string) => {
-        // Clear existing interval if any
-        if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
+        const latestEvent = events[events.length - 1];
+        if (latestEvent &&
+            (latestEvent.event_type === 'workflow.completed' ||
+                latestEvent.event_type === 'workflow.failed')) {
+            setLoading(false);
         }
-
-        pollIntervalRef.current = setInterval(async () => {
-            try {
-                const response = await runAPI.get(runId);
-                const updatedRun: WorkflowRun = response.data;
-                setRun(updatedRun);
-
-                if (
-                    updatedRun.status === RunStatus.COMPLETED ||
-                    updatedRun.status === RunStatus.FAILED ||
-                    updatedRun.status === RunStatus.CANCELLED
-                ) {
-                    if (pollIntervalRef.current) {
-                        clearInterval(pollIntervalRef.current);
-                    }
-                    setLoading(false);
-                }
-            } catch (err: unknown) {
-                console.error("Error polling run status:", err);
-                setError("Failed to fetch run status.");
-                setLoading(false);
-                if (pollIntervalRef.current) {
-                    clearInterval(pollIntervalRef.current);
-                }
-            }
-        }, 3000); // Poll every 3 seconds
-    };
+    }, [events]);
 
     const handleRun = async () => {
         setError(null);
         setLoading(true);
         setRun(null); // Clear previous run
-        if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-        }
 
         try {
+            let currentInput = inputData.trim();
+            // If in OCR mode and file is selected, upload it first
+            if (mode === 'invoice_ocr' && selectedFile) {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+
+                try {
+                    // Upload file (inline fetch since we don't have a helper yet)
+                    // In a real app, add this to api.ts but for speed we do it here
+                    // assuming backend is on correct port relative to this
+                    // NOTE: Hardcoded localhost:8000 might fail if deployed. 
+                    // Better to use relative path if proxying, or generic API client.
+                    // For local dev this is fine.
+                    const uploadRes = await fetch('http://localhost:8000/api/v1/uploads', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (!uploadRes.ok) {
+                        throw new Error('File upload failed');
+                    }
+
+                    const uploadData = await uploadRes.json();
+
+                    // Pass a JSON string as input if using file.
+                    currentInput = JSON.stringify({
+                        file_path: uploadData.file_path,
+                        text: currentInput
+                    });
+
+                } catch (uploadErr) {
+                    console.error("Upload failed", uploadErr);
+                    throw new Error("Failed to upload file. Please try again.");
+                }
+            }
+
             // Convert plain text input to the format expected by the backend
             const payload = {
-                input: inputData.trim(),
+                input: currentInput,
                 language: 'python',
-                mode: 'full'
+                mode: mode
             };
 
             const response = await runAPI.create({
@@ -85,7 +94,7 @@ export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
             });
             const newRun: WorkflowRun = response.data;
             setRun(newRun);
-            pollRunStatus(newRun.id);
+            // WebSocket will now handle real-time updates automatically
         } catch (err: unknown) {
             console.error("Error running workflow:", err);
             const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred.";
@@ -139,11 +148,40 @@ export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-400">Workflow Mode</label>
+                        <select
+                            value={mode}
+                            onChange={(e) => setMode(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-md p-2 text-slate-300 focus:ring-blue-500/20"
+                            disabled={loading}
+                        >
+                            <option value="full">Standard Research</option>
+                            <option value="invoice_ocr">Invoice OCR</option>
+                        </select>
+                    </div>
+
+                    {mode === 'invoice_ocr' && (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                            <label className="text-sm font-medium text-slate-400">Upload Invoice (PDF/Image)</label>
+                            <input
+                                type="file"
+                                onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)}
+                                accept=".pdf,.txt,.png,.jpg,.jpeg"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-md p-2 text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500"
+                                disabled={loading}
+                            />
+                            <p className="text-xs text-slate-500">
+                                Upload a file OR paste text below.
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-400">Your Request</label>
                         <Textarea
                             value={inputData}
                             onChange={(e) => setInputData(e.target.value)}
-                            placeholder="Describe what you want the workflow to do... (e.g., 'find me 10 emails of companies that i can market my ai testing services')"
+                            placeholder={mode === 'invoice_ocr' ? "Optional: Add any extra instructions..." : "Describe what you want the workflow to do..."}
                             className="bg-slate-950 border-slate-800 min-h-[150px] text-slate-300 focus:ring-blue-500/20"
                             disabled={loading}
                         />
@@ -183,6 +221,48 @@ export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
                         </Badge>
                     </CardHeader>
                     <CardContent className="space-y-4 pt-4">
+                        {/* WebSocket Connection Status */}
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 text-xs">
+                                {connectionState === 'connected' ? (
+                                    <>
+                                        <Wifi className="w-3 h-3 text-green-400" />
+                                        <span className="text-green-400">Live</span>
+                                    </>
+                                ) : connectionState === 'connecting' ? (
+                                    <>
+                                        <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+                                        <span className="text-blue-400">Connecting...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <WifiOff className="w-3 h-3 text-slate-500" />
+                                        <span className="text-slate-500">Offline</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Live Progress Bar */}
+                        {(loading || progress > 0) && (
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-slate-400">
+                                        {currentAgent ? `${currentAgent}...` : 'Initializing...'}
+                                    </span>
+                                    <span className="text-slate-400 font-medium">{progress}%</span>
+                                </div>
+                                <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                        className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-violet-500 transition-all duration-500 ease-out"
+                                        style={{ width: `${progress}%` }}
+                                    >
+                                        <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="grid grid-cols-2 gap-4 text-sm">
                             <div className="space-y-1">
                                 <p className="text-slate-500">Run ID</p>
