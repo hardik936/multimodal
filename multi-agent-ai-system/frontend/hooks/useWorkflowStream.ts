@@ -45,7 +45,7 @@ export function useWorkflowStream(
 
         try {
             // WebSocket URL
-            const wsUrl = `ws://localhost:8000/ws/${runId}`;
+            const wsUrl = `ws://localhost:8000/api/v1/ws/${runId}`;
             setConnectionState('connecting');
             const ws = new WebSocket(wsUrl);
 

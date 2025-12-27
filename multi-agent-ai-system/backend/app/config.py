@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # Database
-    DATABASE_URL: str = "sqlite:///./app.db"
+    # Hardcoded absolute path to prevent split-brain issues
+    BASE_DIR: str = r"C:\Users\HP\Documents\antigravity\multi-agent-ai-system\backend"
+    DATABASE_URL: str = f"sqlite:///{os.path.join(BASE_DIR, 'app.db')}"
     
     # File Uploads
     UPLOAD_DIR: str = "uploads"
@@ -61,6 +63,15 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = True
         extra = "ignore"  # Ignore extra environment variables
+
+    # Validator restored to Enforce Backend DB regardless of .env
+    from pydantic import field_validator
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def resolve_database_url(cls, v: str) -> str:
+        # Force absolute path to C:\Users\HP\...\backend\app.db
+        base_dir = r"C:\Users\HP\Documents\antigravity\multi-agent-ai-system\backend"
+        return f"sqlite:///{os.path.join(base_dir, 'app.db')}"
 
 settings = Settings()
 

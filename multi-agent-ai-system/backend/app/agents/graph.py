@@ -30,16 +30,19 @@ def should_continue_after_research(state: AgentState):
     For COMPLEX queries: go to planner for full pipeline
     """
     query_complexity = state.get("query_complexity", "SIMPLE")
+    print(f"DEBUG: should_continue_after_research -> complexity: {query_complexity}")
     
     # Also respect mode for backward compatibility
     if state.get("mode") == "research_only":
+        print("DEBUG: routing to finalizer (mode=research_only)")
         return "finalizer"
     
     # Skip planner/executor/coder for simple queries
     if query_complexity == "SIMPLE":
-        print("Skipping planner/executor/coder for SIMPLE query")
+        print("DEBUG: routing to finalizer (complexity=SIMPLE)")
         return "finalizer"
     
+    print("DEBUG: routing to planner (complexity=COMPLEX)")
     return "planner"
 
 def should_continue_after_plan(state: AgentState):

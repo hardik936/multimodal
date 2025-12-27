@@ -1,0 +1,20 @@
+name: general_agent_smoke
+workflow: multi_agent_system
+cases:
+  - id: smoke_001
+    description: Basic research query check
+    input:
+      input: "What is the capital of France?"
+      mode: "research_only"
+      query_complexity: "SIMPLE"
+    expected: "Paris"
+    matcher: contains
+    timeout_seconds: 30
+  - id: smoke_002
+    description: Python code generation check
+    input:
+      input: "Write a python function to add two numbers"
+      mode: "plan_only"
+    expected: "def add"
+    matcher: contains
+    tags: [coding]

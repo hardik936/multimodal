@@ -10,12 +10,57 @@ import logging
 from typing import Optional
 from contextlib import contextmanager
 
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-from opentelemetry.trace import Status, StatusCode, Tracer
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+    from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+    from opentelemetry.trace import Status, StatusCode, Tracer
+    OPENTELEMETRY_AVAILABLE = True
+except ImportError:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning("Opentelemetry not installed. Tracing will be disabled.")
+    OPENTELEMETRY_AVAILABLE = False
+    
+    # Mocks for missing classes
+    class Tracer:
+        def start_as_current_span(self, name):
+            from contextlib import contextmanager
+            @contextmanager
+            def noop_span():
+                yield None
+            return noop_span()
+            
+    class TracerProvider:
+        def __init__(self, resource=None): pass
+        def add_span_processor(self, processor): pass
+        
+    class BatchSpanProcessor:
+        def __init__(self, exporter): pass
+        
+    class JaegerExporter:
+        def __init__(self, agent_host_name, agent_port): pass
+        
+    class Resource:
+        def __init__(self, attributes): pass
+        
+    SERVICE_NAME = "service_name"
+    
+    class Status:
+        def __init__(self, status_code, description): pass
+        
+    class StatusCode:
+        ERROR = "ERROR"
+        
+    class trace:
+        @staticmethod
+        def get_tracer(name):
+            return Tracer()
+        
+        @staticmethod
+        def set_tracer_provider(provider): pass
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +84,10 @@ def configure_tracing():
     """
     global _tracer_provider, _tracing_configured
     
+    if not OPENTELEMETRY_AVAILABLE:
+        _tracing_configured = True
+        return
+
     if _tracing_configured:
         return
     

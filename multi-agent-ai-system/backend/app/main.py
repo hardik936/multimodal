@@ -19,11 +19,17 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Startup and shutdown logic"""
     # Startup
-    logger.info(f"Starting {settings.APP_NAME}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     init_db()
+    
+    # Start Shadow Agent
+    from app.agents.shadow_agent import shadow_agent
+    await shadow_agent.start()
+    
     yield
+    
     # Shutdown
+    await shadow_agent.stop()
     from app.queue.producer import close_connection
     await close_connection()
     logger.info("Shutting down application")
@@ -111,9 +117,10 @@ app.include_router(
 )
 
 # WebSocket for real-time streaming
-from app.routers import websocket
+from app.routers import ws
 app.include_router(
-    websocket.router,
+    ws.router,
+    prefix=f"{settings.API_V1_PREFIX}/ws",
     tags=["websocket"],
 )
 

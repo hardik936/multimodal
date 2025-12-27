@@ -73,18 +73,29 @@ async def list_history(
         
         for row in rows:
             # Parse metadata if it's a blob/string
+            # Parse metadata if it's a blob/string
             meta = {}
             if row["metadata"]:
                 try:
-                    # distinct types possible, usually it's msgpack or json-like binary from LangGraph
-                    # But for API, we might skip deep parsing if it's complex binary
-                    # SQLite stores it as BLOB usually with SqliteSaver.
-                    # We'll try to guess or just return empty for now if decoding is hard without internal libs.
-                    # Actually LangGraph SqliteSaver stores as BLOB (Pickle or Msgpack).
-                    # We might not be able to decode easily here without LangGraph Serializer.
-                    pass
-                except:
-                    pass
+                    # Try to parse as JSON first (common for custom checkpoints or simple serializers)
+                    raw_meta = row["metadata"]
+                    if isinstance(raw_meta, bytes):
+                        # Try UTF-8 decode
+                        try:
+                            meta = json.loads(raw_meta.decode("utf-8"))
+                        except:
+                            # If not UTF-8 JSON, might be msgpack or pickle.
+                            # For safety/simplicity, we skip complex binary decoding for now
+                            # unless we explicitly add msgpack support.
+                            # But we can try to return as string representation if small
+                            pass
+                    elif isinstance(raw_meta, str):
+                        meta = json.loads(raw_meta)
+                    elif isinstance(raw_meta, dict):
+                        meta = raw_meta
+                except Exception as e:
+                    logger.warning(f"Failed to parse checkpoint metadata: {e}")
+
             
             checkpoints.append(CheckpointResponse(
                 id=row["checkpoint_id"],

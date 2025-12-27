@@ -18,11 +18,7 @@ huey
 aio-pika
 psycopg2-binary
 redis
-
-# OpenTelemetry for distributed tracing
-opentelemetry-api>=1.20.0
-opentelemetry-sdk>=1.20.0
-opentelemetry-exporter-jaeger>=1.20.0
-opentelemetry-instrumentation>=0.41b0
 deprecated
 wrapt
+docker
+langgraph-checkpoint-sqlite

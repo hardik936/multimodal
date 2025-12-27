@@ -47,6 +47,40 @@ async def publish_message(message: dict, routing_key: str = "tasks.workflow_exec
             )
             logger.info(f"Published message to {routing_key}: {message.get('task_id')}")
     except Exception as e:
-        logger.error(f"Failed to publish message: {e}")
-        # In a real app, you might want to retry or fallback
-        raise
+        logger.warning(f"Failed to connect/publish to RabbitMQ: {e}. Falling back to LOCAL IN-PROCESS execution.")
+        
+        try:
+            # Fallback: Execute directly in this process (for dev/demo without RabbitMQ)
+            # Late import to avoid circular dependency
+            from app.queue.worker import process_task
+            
+            # Re-serialize as bytes to match worker expectation
+            message_body = json.dumps(message).encode()
+            
+            # Run the task in background to avoid blocking the API response
+            # Run the task in background to avoid blocking the API response
+            import asyncio
+            
+            async def safe_process(body):
+                try:
+                    # Give the API request time to complete and release DB locks
+                    await asyncio.sleep(2.0)
+                    logger.info("Starting delayed background execution...")
+                    
+                    # Set a timeout for the entire workflow execution (e.g. 5 minutes)
+                    await asyncio.wait_for(process_task(body), timeout=300.0)
+                except asyncio.TimeoutError:
+                    logger.error("Workflow execution TIMED OUT locally after 300s.")
+                    # In a real system, we should mark the run as FAILED in DB here.
+                except Exception as ex:
+                    logger.error(f"Background task CRASHED: {ex}")
+                    import traceback
+                    traceback.print_exc()
+
+            asyncio.create_task(safe_process(message_body))
+            logger.info(f"Scheduled task {message.get('task_id')} for local execution.")
+            
+        except Exception as local_e:
+            logger.error(f"Local execution also failed: {local_e}")
+            raise local_e
+

@@ -8,8 +8,10 @@ from app.observability.tracing import get_tracer, trace_span, add_span_attribute
 from app.observability.events import emit_workflow_event, EventType
 
 tracer = get_tracer("agent.researcher")
+import logging
+logger = logging.getLogger(__name__)
 
-def research_node(state: dict):
+async def research_node(state: dict):
     """
     Optimized Researcher agent:
     - Uses web search to gather information with minimal LLM calls.
@@ -41,7 +43,9 @@ def research_node(state: dict):
     ) as agent_span:
         # Initialize LLM
         try:
-            llm = ChatGroq(model_name=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY)
+            logger.info(f"Initializing ChatGroq (run_id={run_id})...")
+            llm = ChatGroq(model_name=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY, request_timeout=60)
+            logger.info("ChatGroq initialized.")
         except Exception as e:
             return {
                 "research_data": f"Failed to initialize LLM: {str(e)}",
@@ -53,7 +57,8 @@ def research_node(state: dict):
         complexity_keywords = [
             'find', 'list', 'companies', 'emails', 'current', 'latest', 
             'price', 'stock', 'news', 'compare', 'analysis', 'statistics',
-            'data', 'research', 'investigate', 'multiple', 'several'
+            'data', 'research', 'investigate', 'multiple', 'several',
+            'create', 'game', 'code', 'script', 'generate', 'write', 'implement'
         ]
         
         input_lower = original_input.lower()
@@ -71,9 +76,14 @@ def research_node(state: dict):
         all_search_results = ""
         search_successful = False
         try:
+            import asyncio
+            loop = asyncio.get_event_loop()
             ddgs = DDGS()
             # Single search with more results (5 instead of 3x3=9)
-            results = ddgs.text(original_input, max_results=5)
+            logger.info(f"Starting DuckDuckGo search for: {original_input}...")
+            # Use run_in_executor for the blocking search call
+            results = await loop.run_in_executor(None, lambda: ddgs.text(original_input, max_results=5))
+            logger.info(f"DuckDuckGo search completed. Results found: {bool(results)}")
             
             if results:
                 search_successful = True
@@ -85,7 +95,7 @@ def research_node(state: dict):
                 all_search_results = "No search results found."
                 
         except Exception as e:
-            print(f"Search error: {e}")
+            logger.error(f"Search error for {run_id}: {e}")
             all_search_results = f"Search failed: {str(e)}"
 
         # 3. Single LLM Call for Synthesis (NO RELEVANCE CHECK)
@@ -122,7 +132,9 @@ def research_node(state: dict):
                         "llm.purpose": "fallback_synthesis",
                     }
                 ) as llm_span:
+                    logger.info("Invoking LLM for fallback synthesis...")
                     response = chain.invoke({"query": original_input})
+                    logger.info("LLM fallback synthesis completed.")
                     llm_latency = (time.time() - llm_start) * 1000
                     add_span_attributes(llm_span, {"llm.latency_ms": llm_latency})
                     content = response.content
@@ -179,10 +191,12 @@ def research_node(state: dict):
                         "llm.purpose": "research_synthesis",
                     }
                 ) as llm_span:
+                    logger.info("Invoking LLM for research synthesis...")
                     response = chain.invoke({
                         "original_input": original_input,
                         "results": all_search_results
                     })
+                    logger.info("LLM research synthesis completed.")
                     llm_latency = (time.time() - llm_start) * 1000
                     add_span_attributes(llm_span, {"llm.latency_ms": llm_latency})
                     content = response.content

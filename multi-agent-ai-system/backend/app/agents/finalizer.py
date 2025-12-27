@@ -21,8 +21,12 @@ def finalizer_node(state: dict):
     code = state.get("code_data")
     
     # Initialize LLM for fallback synthesis
+    import logging
+    logger = logging.getLogger(__name__)
     try:
-        llm = ChatGroq(model_name=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY)
+        logger.info("Initializing Finalizer LLM...")
+        llm = ChatGroq(model_name=settings.GROQ_MODEL, api_key=settings.GROQ_API_KEY, request_timeout=60)
+        logger.info("Finalizer LLM initialized.")
     except Exception as e:
         print(f"Finalizer LLM initialization failed: {e}")
         llm = None
@@ -99,7 +103,11 @@ def synthesize_complex_output(original_input: str, research: str, plan: any, exe
         )
         
         chain = prompt | llm
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("Invoking Finalizer LLM for complex synthesis...")
         response = chain.invoke({"input": original_input, "context": context})
+        logger.info("Finalizer LLM complex synthesis completed.")
         return response.content
         
     except Exception as e:
@@ -131,7 +139,11 @@ def generate_fallback_answer(original_input: str, llm) -> str:
         )
         
         chain = prompt | llm
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("Invoking Finalizer LLM for fallback...")
         response = chain.invoke({"input": original_input})
+        logger.info("Finalizer LLM fallback completed.")
         return response.content
         
     except Exception as e:

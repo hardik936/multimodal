@@ -6,6 +6,7 @@ This module wraps the existing agent functions with distributed tracing.
 
 import time
 import logging
+import inspect
 from typing import Callable, Dict, Any
 from app.observability.tracing import get_tracer, trace_span, add_span_attributes, set_span_error
 from app.observability.events import emit_workflow_event, EventType
@@ -35,7 +36,7 @@ coder_tracer = get_tracer("agent.coder")
 finalizer_tracer = get_tracer("agent.finalizer")
 
 
-def _execute_with_reliability(
+async def _execute_with_reliability(
     tracer, 
     agent_id: str, 
     agent_name: str, 
@@ -70,13 +71,10 @@ def _execute_with_reliability(
 
     # 2. Execution with Tracing and Error Handling
     with trace_span(
-        tracer,
-        "agent.execute",
+        tracer, 
+        f"agent.{agent_id}", 
         attributes={
-            "agent.id": agent_id,
-            "agent.role": agent_id,
-            "agent.name": agent_name,
-            "agent.query_complexity": state.get("query_complexity", "UNKNOWN"),
+            "workflow.run_id": run_id,
             "workflow.id": workflow_id
         }
     ) as agent_span:
@@ -89,7 +87,11 @@ def _execute_with_reliability(
             state_with_context["active_workflow_id"] = workflow_id
             state_with_context["active_agent_id"] = agent_id
             
-            result = node_func(state_with_context)
+            if inspect.iscoroutinefunction(node_func):
+                result = await node_func(state_with_context)
+            else:
+                result = node_func(state_with_context)
+                
             add_span_attributes(agent_span, {"agent.status": "success"})
             
             # Emit agent completed event
@@ -98,14 +100,22 @@ def _execute_with_reliability(
                 event_type=EventType.WORKFLOW_AGENT_COMPLETED,
                 agent_name=agent_name,
                 progress=progress,
-                payload={"agent_id": agent_id, "success": True}
+                payload={"output_snippet": str(result.get("final_output", result.get(f"{agent_id}_data", "")))[:200]}
             )
             return result
             
         except Exception as e:
-            logger.error(f"Agent {agent_name} ({agent_id}) failed: {e}")
+            logger.error(f"Agent {agent_name} failed: {e}")
             set_span_error(agent_span, e)
             add_span_attributes(agent_span, {"agent.status": "failed"})
+            
+            # Emit agent failed event
+            emit_workflow_event(
+                run_id=run_id,
+                event_type=EventType.WORKFLOW_AGENT_FAILED,
+                agent_name=agent_name,
+                payload={"error": str(e)}
+            )
             
             # 3. Graceful Degradation / Fallback logic
             # If the agent fails, we can either re-raise or return a partial state so next steps can handle it.
@@ -123,30 +133,28 @@ def _execute_with_reliability(
             # Without explicit configuration passed in, strict failure is safer than silent corruption.
             raise e
 
-
-def traced_planner_node(state: dict):
+# Wrapped Agent Nodes
+async def traced_planner_node(state: Dict) -> Dict:
     """Planner node with tracing and reliability."""
-    return _execute_with_reliability(
+    return await _execute_with_reliability(
         planner_tracer, "planner", "Planner", planner_module.planner_node, state
     )
 
-
-def traced_executor_node(state: dict):
+async def traced_executor_node(state: Dict) -> Dict:
     """Executor node with tracing and reliability."""
-    return _execute_with_reliability(
+    return await _execute_with_reliability(
         executor_tracer, "executor", "Executor", executor_module.executor_node, state
     )
 
-
-def traced_coder_node(state: dict):
+async def traced_coder_node(state: Dict) -> Dict:
     """Coder node with tracing and reliability."""
-    return _execute_with_reliability(
+    return await _execute_with_reliability(
         coder_tracer, "coder", "Coder", coder_module.coder_node, state
     )
 
-
-def traced_finalizer_node(state: dict):
+async def traced_finalizer_node(state: Dict) -> Dict:
     """Finalizer node with tracing and reliability."""
-    return _execute_with_reliability(
+    return await _execute_with_reliability(
         finalizer_tracer, "finalizer", "Finalizer", finalizer_module.finalizer_node, state
     )
+

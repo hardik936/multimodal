@@ -3,6 +3,7 @@ Huey background task queue configuration and task definitions.
 Handles asynchronous workflow execution and periodic cleanup.
 """
 import logging
+import sys
 import asyncio
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -23,18 +24,21 @@ import sqlite3
 logger = logging.getLogger(__name__)
 
 # Initialize Huey
-# Use a SQLite file in the backend working directory
+# Use absolute path to ensure single source of truth
+import os
+BASE_DIR = r"C:\Users\HP\Documents\antigravity\multi-agent-ai-system\backend"
 huey = SqliteHuey(
-    filename="huey.db",
+    filename=os.path.join(BASE_DIR, "huey.db"),
     name="multi_agent_workflows",
     results=True,
     store_none=True,
     utc=True,
-    immediate=settings.HUEY_IMMEDIATE,
+    # Force immediate=False when running via the consumer, regardless of settings
+    immediate=False if "huey_consumer" in str(sys.modules.get("__main__")) else settings.HUEY_IMMEDIATE,
 )
 
 
-@huey.task(retry=True, retry_delay=60, retries=3)
+@huey.task(retry=False)
 def execute_workflow_task(
     run_id: str,
     workflow_id: str,
@@ -52,7 +56,10 @@ def execute_workflow_task(
     """
     logger.info(f"Starting workflow execution for run_id: {run_id}")
     logger.info(f"Input data: {input_data}")
+    logger.warning(f"DEPRECATED: execute_workflow_task called for {run_id}. This uses SQLite Huey. Please use RabbitMQ worker.")
+    print(f"DEBUG: execute_workflow_task STARTED for {run_id}")
     
+    result_state = None
     db = SessionLocal()
     try:
         # Load run record
@@ -66,10 +73,9 @@ def execute_workflow_task(
         run.started_at = datetime.now(timezone.utc)
         db.commit()
         
-        # Create workflow graph with checkpointer
         # We need a persistent checkpointer for HITL
-        conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
-        memory = SqliteSaver(conn)
+        from langgraph.checkpoint.memory import MemorySaver
+        memory = MemorySaver()
         
         # Determine approval gates
         # For now, we interrupt before nodes that have configured gates
@@ -113,12 +119,11 @@ def execute_workflow_task(
                 # We invoke with the config to enable checkpointing
                 # Note: valid LangGraph invoke returns the final state
                 result_state = pool.submit(asyncio.run, workflow.ainvoke(initial_state, thread_config)).result()
+                print(f"DEBUG: ainvoke result_state: {result_state is not None}")
         except Exception as e:
-            # Check if this is a "GraphInterrupt" or just a stop
-            # Actually, standard ainvoke usage will return normally if interrupted, 
-            # preserving state in checkpointer.
-            # We check the graph state to see if there are next steps
-            pass
+            logger.error(f"Graph execution failed: {e}")
+            logger.error(traceback.format_exc())
+            raise e
 
         # Check current state from memory to see if we are paused or done
         # Accessing state needs a sync wrapper or direct usage if memory is sync (SqliteSaver is sync-compatible often but used via interface)
@@ -223,6 +228,8 @@ def execute_workflow_task(
         logger.info(f"Workflow execution completed for run_id: {run_id}")
         
     except Exception as e:
+        print(f"DEBUG: WORKER FAILED for {run_id}. Error: {e}")
+
         logger.error(f"Error executing workflow {run_id}: {str(e)}")
         logger.error(traceback.format_exc())
         
@@ -250,6 +257,7 @@ def resume_workflow_task(run_id: str):
     
     db = SessionLocal()
     try:
+        result_state = None
         run = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
         if not run:
             logger.error(f"WorkflowRun not found for id: {run_id}")

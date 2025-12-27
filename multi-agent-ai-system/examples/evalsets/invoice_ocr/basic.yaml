@@ -1,0 +1,20 @@
+name: invoice_ocr_basic
+workflow: invoice_ocr
+cases:
+  - id: case_001
+    description: simple invoice extraction
+    input:
+      document_text: "Invoice #123\nTotal: $100.00\nDate: 2025-01-01"
+    expected:
+      invoice_number: "123"
+      total: "100.00"
+    matcher: json_key
+    timeout_seconds: 10
+  - id: case_002
+    description: "defensive: missing total"
+    input:
+      document_text: "Invoice #124\nDate: 2025-01-02"
+    expected:
+      invoice_number: "124"
+    matcher: json_key
+    tags: [safety]

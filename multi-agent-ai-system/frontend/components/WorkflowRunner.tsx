@@ -11,6 +11,9 @@ import { AlertCircle, Loader2, CheckCircle2, XCircle, Clock, Wifi, WifiOff } fro
 import { cn } from '@/lib/utils';
 import { useWorkflowStream } from '@/hooks/useWorkflowStream';
 
+import { PresenceIndicator } from './PresenceIndicator';
+import { ShadowHintDisplay } from './ShadowHint';
+
 interface WorkflowRunnerProps {
     workflowId: string;
 }
@@ -24,20 +27,52 @@ export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
     const [error, setError] = useState<string | null>(null);
 
     // Use WebSocket for real-time updates
-    const { progress, currentAgent, connectionState, events } = useWorkflowStream(
+    // Simulating "Driver" role for this user
+    const { progress, currentAgent, connectionState, events, onlineUsers, hints } = useWorkflowStream(
         run?.id || null,
-        !!run
+        !!run,
+        "driver",
+        "user-" + Math.floor(Math.random() * 1000) // Random ID for demo
     );
 
     // Auto-stop loading when workflow completes
+    // React to events to update local state
     useEffect(() => {
+        if (!events.length) return;
+
         const latestEvent = events[events.length - 1];
-        if (latestEvent &&
-            (latestEvent.event_type === 'workflow.completed' ||
-                latestEvent.event_type === 'workflow.failed')) {
+        if (!latestEvent) return;
+
+        // Auto-update status based on events
+        if (latestEvent.event_type === 'workflow.completed') {
             setLoading(false);
+            if (run) {
+                setRun(prev => prev ? ({
+                    ...prev,
+                    status: RunStatus.COMPLETED,
+                    output_data: latestEvent.payload?.output ? { final_output: latestEvent.payload.output } : prev.output_data,
+                    // If payload has output, use it as result
+                    result: (latestEvent.payload?.output as string) || prev.result
+                }) : null);
+            }
+        } else if (latestEvent.event_type === 'workflow.failed') {
+            setLoading(false);
+            if (run) {
+                setRun(prev => prev ? ({
+                    ...prev,
+                    status: RunStatus.FAILED,
+                    error_message: (latestEvent.payload?.error as string) || "Unknown error"
+                }) : null);
+            }
+        } else if (latestEvent.event_type === 'workflow.started') {
+            if (run && run.status === RunStatus.PENDING) {
+                setRun(prev => prev ? ({
+                    ...prev,
+                    status: RunStatus.RUNNING
+                }) : null);
+            }
         }
-    }, [events]);
+    }, [events, run]);
 
     const handleRun = async () => {
         setError(null);
@@ -214,13 +249,17 @@ export default function WorkflowRunner({ workflowId }: WorkflowRunnerProps) {
             {run && (
                 <Card className="border-slate-800 bg-slate-900/50 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-lg font-medium text-slate-200">Run Status</CardTitle>
+                        <div className="flex items-center gap-4">
+                            <CardTitle className="text-lg font-medium text-slate-200">Run Status</CardTitle>
+                            <PresenceIndicator users={onlineUsers} />
+                        </div>
                         <Badge variant={getStatusBadgeVariant(run.status)} className="flex items-center">
                             {getStatusIcon(run.status)}
                             {run.status.toUpperCase()}
                         </Badge>
                     </CardHeader>
                     <CardContent className="space-y-4 pt-4">
+                        <ShadowHintDisplay hints={hints} />
                         {/* WebSocket Connection Status */}
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2 text-xs">

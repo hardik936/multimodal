@@ -34,13 +34,20 @@ def run_sync(func):
     return wrapper
 
 def get_db_run(run_id: str):
+    logger.info(f"DEBUG: get_db_run called for {run_id}")
     db = SessionLocal()
     try:
-        return db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
+        run = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
+        logger.info(f"DEBUG: get_db_run result: {run}")
+        return run
+    except Exception as e:
+        logger.error(f"DEBUG: get_db_run failed: {e}")
+        raise
     finally:
         db.close()
 
 def update_run_status_sync(run_id: str, status: RunStatus, started_at=None, completed_at=None, output_data=None, error_message=None):
+    logger.info(f"DEBUG: update_run_status_sync {status} for {run_id}")
     db = SessionLocal()
     try:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
@@ -55,6 +62,7 @@ def update_run_status_sync(run_id: str, status: RunStatus, started_at=None, comp
             if error_message:
                 run.error_message = error_message
             db.commit()
+            logger.info(f"DEBUG: update_run_status_sync committed")
     except Exception as e:
         logger.error(f"Failed to update run status: {e}")
     finally:
@@ -101,6 +109,7 @@ def save_messages_sync(run_id: str, result_state: dict):
         db.close()
 
 async def process_task(message_body: bytes):
+    result_state = None
     try:
         data = json.loads(message_body)
         run_id = data.get("task_id")
@@ -136,7 +145,13 @@ async def process_task(message_body: bytes):
         )
 
         # 2. Execution with workflow.run tracing
-        workflow = create_multi_agent_workflow(workflow_config)
+        # Initialize checkpointer
+        from app.execution.checkpointer import AsyncPostgresSaver
+        checkpointer = AsyncPostgresSaver()
+        # from langgraph.checkpoint.memory import MemorySaver
+        # checkpointer = MemorySaver()
+
+        workflow = create_multi_agent_workflow(workflow_config, checkpointer=checkpointer)
         
         initial_state = {
             "input": input_data.get("input") or input_data.get("query", ""),
@@ -165,7 +180,13 @@ async def process_task(message_body: bytes):
             }
         ) as workflow_span:
             # This is where we run the actual AI workflow
-            result_state = await workflow.ainvoke(initial_state)
+            # Pass thread_id for persistence
+            # Pass thread_id for persistence and recursion_limit for safety
+            config = {
+                "configurable": {"thread_id": run_id},
+                "recursion_limit": 50  # Limit max steps to prevent infinite loops
+            }
+            result_state = await workflow.ainvoke(initial_state, config=config)
             
             if result_state is None:
                 raise ValueError("Workflow execution returned None")
@@ -277,7 +298,8 @@ async def process_task(message_body: bytes):
                 event_type=EventType.WORKFLOW_FAILED,
                 payload={"error": str(e)}
             )
-        raise
+        # Do not raise the exception; this ACKs the message and prevents infinite retries.
+        # The run status is already updated to FAILED above.
 
 async def main():
     # Initialize database models to ensure all relationships are configured

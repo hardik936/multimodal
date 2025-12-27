@@ -68,23 +68,25 @@ async def create_run(
     
     # Trigger background task
     # Note: With HUEY_IMMEDIATE=True, this runs synchronously
+    # Trigger background task via Huey
     # Trigger background task via RabbitMQ
     from app.queue.producer import publish_message
     
-    task_payload = {
-        "workflow_config": {
-            "graph_definition": workflow.graph_definition,
-            "agents_config": workflow.agents_config
-        },
-        "input_data": run.input_data
+    # Payload matching what process_task expects
+    message = {
+        "task_id": db_run.id,
+        "payload": {
+            "workflow_config": {
+                "graph_definition": workflow.graph_definition,
+                "agents_config": workflow.agents_config
+            },
+            "input_data": run.input_data
+        }
     }
     
-    await publish_message({
-        "task_id": db_run.id,
-        "task_type": "workflow_execution",
-        "payload": task_payload,
-        "created_at": str(datetime.now())
-    })
+    await publish_message(message)
+    # Task ID is the run_id itself in our new system
+
     
     # Refresh to get any updates if synchronous
     db.refresh(db_run)
